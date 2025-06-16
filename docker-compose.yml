@@ -1,0 +1,164 @@
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.1
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=changeme
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - elastic
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  elasticsearch-setup:
+    image: curlimages/curl:latest
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./elasticsearch-setup.sh:/setup.sh
+    entrypoint: ["/bin/sh", "/setup.sh"]
+    networks:
+      - elastic
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.1
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=changeme
+      - XPACK_SECURITY_ENABLED=true
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    depends_on:
+      elasticsearch-setup:
+        condition: service_completed_successfully
+    networks:
+      - elastic
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.12.1
+    ports:
+      - "5044:5044"
+      - "5001:5001/tcp"
+      - "5001:5001/udp"
+      - "9600:9600"
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+      ELASTIC_USERNAME: elastic
+      ELASTIC_PASSWORD: changeme
+    depends_on:
+      elasticsearch-setup:
+        condition: service_completed_successfully
+    networks:
+      - elastic
+
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.12.1
+    user: root
+    volumes:
+      - ./metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+      - /proc:/hostfs/proc:ro
+      - /:/hostfs:ro
+    environment:
+      ELASTIC_USERNAME: elastic
+      ELASTIC_PASSWORD: changeme
+    command: metricbeat -e --strict.perms=false
+    depends_on:
+      elasticsearch-setup:
+        condition: service_completed_successfully
+    networks:
+      - elastic
+
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:8.12.1
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./apm-server/apm-server.yml:/usr/share/apm-server/apm-server.yml:ro
+    environment:
+      - output.elasticsearch.hosts=["http://elasticsearch:9200"]
+      - output.elasticsearch.username=elastic
+      - output.elasticsearch.password=changeme
+      - apm-server.auth.secret_token=your_secret_token
+      - apm-server.auth.anonymous.enabled=true
+    depends_on:
+      elasticsearch-setup:
+        condition: service_completed_successfully
+    networks:
+      - elastic
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - elastic
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=appdb
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD=apppass
+      - ELASTIC_APM_SERVER_URL=http://apm-server:8200
+      - ELASTIC_APM_SERVICE_NAME=backend-service
+      - ELASTIC_APM_SECRET_TOKEN=your_secret_token
+    depends_on:
+      - postgres
+      - apm-server
+    networks:
+      - elastic
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - REACT_APP_API_URL=http://localhost:3000
+      - ELASTIC_APM_SERVER_URL=http://apm-server:8200
+      - ELASTIC_APM_SERVICE_NAME=frontend-service
+      - ELASTIC_APM_SECRET_TOKEN=your_secret_token
+    depends_on:
+      - backend
+      - apm-server
+    networks:
+      - elastic
+
+networks:
+  elastic:
+    driver: bridge
+
+volumes:
+  elasticsearch-data:
+  postgres-data: 

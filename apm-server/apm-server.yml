@@ -1,0 +1,32 @@
+apm-server:
+  host: "0.0.0.0:8200"
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  username: elastic
+  password: changeme
+
+setup.kibana:
+  host: "kibana:5601"
+  username: kibana_system
+  password: changeme
+
+setup.template.name: "apm-server"
+setup.template.pattern: "apm-server-*"
+setup.ilm.enabled: false
+
+apm-server.auth:
+  secret_token: "your_secret_token"
+  anonymous:
+    enabled: true
+    rate_limit:
+      ip_limit: 100
+      event_limit: 50
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/apm-server
+  name: apm-server
+  keepfiles: 7
+  permissions: 0644 
