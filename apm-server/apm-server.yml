@@ -24,9 +24,5 @@ apm-server.auth:
       event_limit: 50
 
 logging.level: info
-logging.to_files: true
-logging.files:
-  path: /var/log/apm-server
-  name: apm-server
-  keepfiles: 7
-  permissions: 0644 
+logging.to_files: false
+logging.to_syslog: false 

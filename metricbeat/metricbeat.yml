@@ -31,9 +31,13 @@ metricbeat.modules:
 
 output.elasticsearch:
   hosts: ["elasticsearch:9200"]
+  username: "elastic"
+  password: "changeme"
 
 setup.kibana:
   host: "kibana:5601"
+  username: "elastic"
+  password: "changeme"
 
 setup.template.name: "metricbeat"
 setup.template.pattern: "metricbeat-*"

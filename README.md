@@ -106,4 +106,25 @@ docker-compose down
 To remove all data (including volumes):
 ```bash
 docker-compose down -v
-``` 
+```
+
+## Additional Troubleshooting
+
+If you encounter issues with Kibana, you can check the Elasticsearch health:
+```bash
+curl -u elastic:changeme http://localhost:9200/_cluster/health?pretty
+```
+
+If the status is not `yellow` or `green`, it indicates that Elasticsearch is not fully ready. 
+
+To check the elasticsearch-setup logs, you can run:
+```bash
+docker-compose logs elasticsearch-setup --tail=50
+```
+
+If you encounter issues with Kibana, you can check the Kibana logs:
+```bash
+docker-compose logs kibana --tail=50
+```
+
+If you see errors, please share them here so I can help further. 
